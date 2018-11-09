@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "code": 0,
+    "message": "成功"
+  },
+  "data": [{
+    "id": 303,
+    "resourceName": "北京市残疾人辅具站",
+    "site": "111111北京市残疾人辅具站aaaaaaaaaaaaaaaaaaaaaaaaa",
+    "phone": "",
+    "latitude": "39.7418440000",
+    "longitude": "116.3554030000",
+    "distance": 0.0
+  }, {
+    "id": 304,
+    "resourceName": "银行13",
+    "site": "北京",
+    "phone": "",
+    "latitude": "39.14511",
+    "longitude": "116.2541154",
+    "distance": 0.0
+  }]
+}

@@ -1,0 +1,877 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <script>
+        ;(function () {
+            //缩放比例
+            var defaultW = 375;
+            if (/Android (d+.d+)/.test(navigator.userAgent)) {
+                var version = parseFloat(RegExp.$1);
+                if (version > 2.3) {
+                    var phoneScale = parseInt(window.screen.width) / defaultW;
+                    document.write('<meta name="viewport" content="width=' + defaultW + '", minimum-scale = ' + phoneScale + ", maximum-scale = " + phoneScale + ', target-densitydpi=device-dpi">')
+                } else {
+                    document.write('<meta name="viewport" content="width=' + defaultW + '">')
+                }
+            } else {
+                document.write('<meta name="viewport" content="width=' + defaultW + ', user-scalable=no">')
+            }
+            ;
+        })();
+    </script>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="Cache-Control" content="no-siteapp">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="grey">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="stylesheet" href="https://a.amap.com/jsapi_demos/static/demo-center/css/demo-center.css"/>
+    <link rel="stylesheet" href="main.css">
+    <title>位置服务</title>
+</head>
+<body>
+<!--点击搜索后出现的搜索框-->
+<div class="search-point-box">
+    <div class="search-input-div">
+        <i class="search-input-icon" onclick="getPointsBySearch()"></i>
+        <input class="search-input-t" placeholder="请输入搜索内容" id="searchInput1" type="text" value="" style="outline: none"
+               maxlength="40" onfocus="getFocus()">
+        <i class="delete-input-text" onclick="clearInput1()"></i>
+    </div>
+    <span class="input-cancel" onclick="closeThemeSearch()">取消</span>
+</div>
+<div class="search-select-box">
+    <div class="search-box" onclick="openThemeSearch()">
+        <i class="search-icon"></i>
+        <span class="search-text">搜索</span>
+        <span class="border-line"></span>
+    </div>
+    <div class="select-box" onclick="showAllList()">
+        <div id="selectText" class="select-text"></div>
+        <i id="select-icon" class="down-arrow-icon"></i>
+    </div>
+</div>
+<!--下拉列表的全部展开-->
+<div id="allSelect" style=" display: none;">
+</div>
+<!--地图-->
+<div id="container"></div>
+<!--信息窗口-->
+<div id="informationBody" class="information-model">
+    <div class="information-model-wrap">
+        <div class="information-model-title">--</div>
+        <div class="information-model-phone">
+            <span>联系电话：</span>
+            <a class="phone-color"></a>
+        </div>
+        <div class="information-model-phone">
+            <span style="display:block;vertical-align: middle;float: left;">地址：</span>
+            <span class="site-info">--</span>
+        </div>
+    </div>
+    <div class="whether-information-wrap">
+        <div class="whether-left" onclick="openRimBox()">
+            <i class="rim-icon"></i>搜周边
+        </div>
+        <div class="whether-right">
+            <span id="whetherIcon"></span>
+            <span class="whether-info"></span>
+        </div>
+    </div>
+</div>
+<!--周边窗口-->
+<div class="rim-box">
+</div>
+<!--周边位置列表-->
+<div class="near-place-box" id="placeBox">
+    <div class="overflow-box"></div>
+</div>
+<!--点击查看更多-->
+<div class="click-more-info" onclick="showAllPlace()">
+    点击查看更多结果
+</div>
+<!-- 加载地图JSAPI脚本 -->
+<script src="https://webapi.amap.com/maps?v=1.4.10&key=8ab5df1f0299eb133b692c86264fd883&plugin=ElasticMarker"></script>
+<script src="jqeury.min.js"></script>
+<script>
+    var selectArray = [];//下拉列表数组
+    var facilities = [];//灵活点标记的数据
+    var selectId = '';//下拉列表选中的具体项
+
+    //var serverUrl='http://172.31.76.26:8080';
+    //var serverUrl='http://t100ydgfwzfw.globetoon.com';//100服务器地址
+    var serverUrl = './';//本地
+    //var serverUrl='http://t200ydgfwzfw.zhengtoon.com';
+    //var serverUrl='http://ydgfwzfw.globetoon.com';
+    var centerPoint;
+    var interfaceFlag = 1;//搜索主题或者附近资源的变量，0是附近资源，1是主题资源
+    var placeHeight = '';//位置列表的高度
+    var placeId = '';
+    var oneStart = 0;//第一次进来定位到默认中心
+    var isSearchByName = false;//是否根据搜索框的值查询，第一次点击周边图标带入输入框的值，但是不要求根据名称查询。
+    var selectedPoint;//选中的点，展示弹窗的那个点
+    var pageNumber = 1;//分页的页码
+    var data1 = [];//位置列表点存储集合，分页及选中点汇总
+    var isAllowPost = true;
+    var isAllowInsert = true; //输入框输入值搜索，不插入选中点
+
+    var map = new AMap.Map('container', {
+        resizeEnable: true, //是否监控地图容器尺寸变化
+        zoom: 13, //初始化地图层级
+        center: [116.397428, 39.90923] //初始化地图中心点
+    });
+    //实时路况图层
+    var trafficLayer = new AMap.TileLayer.Traffic({
+        zooms: [12, 19],
+        zIndex: 10
+    });
+    map.add(trafficLayer);//添加图层到地图
+    AMap.plugin('AMap.Scale', function () {//异步加载插件
+        var scale = new AMap.Scale();
+        map.addControl(scale);
+    });
+    //加载天气查询插件
+    AMap.plugin('AMap.Weather', function () {
+        //创建天气查询实例
+        var weather = new AMap.Weather();
+
+        //执行实时天气信息查询
+        weather.getLive('110000', function (err, data) {
+            console.log(err, data);
+            var str = data.weather + data.temperature + '°C';
+            $(".whether-info").text(str);
+            var classname = weatherIcon(data.weather);
+            $("#whetherIcon").attr("class", classname)
+        });
+    });
+
+    //是否显示删除icon
+    $("#searchInput1").bind('input porpertychange', function () {
+        if ($("#searchInput1").val()) {
+            $('.delete-input-text').show();
+        } else {
+            $('.delete-input-text').hide();
+        }
+    });
+
+    //输入框获取焦点，列表传名称字段查询
+    function getFocus() {
+        isSearchByName = true;
+        isAllowPost = true;
+        isAllowInsert = false;
+        pageNumber = 1;
+    }
+
+    //预报天气的图标
+    function weatherIcon(str) {
+        var res = "";
+        if (/^晴$/.test(str)) {
+            res = "w-qing";
+        } else if (/^小雨$/.test(str)) {
+            res = "w-xiaoyu";
+        } else if (/^中雨$/.test(str)) {
+            res = "w-zhongyu";
+        } else if (/^大雨$/.test(str)) {
+            res = "w-dayu";
+        } else if (/^大暴雨$/.test(str)) {
+            res = "w-dabaoyu";
+        } else if (/^阵雨$/.test(str)) {
+            res = "w-zhenyu";
+        } else if (/^雷阵雨$/.test(str)) {
+            res = "w-leizhenyu";
+        } else if (/^冻雨$/.test(str)) {
+            res = "w-dongyu";
+        } else if (/^扬沙$/.test(str)) {
+            res = "w-yangsha";
+        } else if (/^浮尘$/.test(str)) {
+            res = "w-fuchen";
+        } else if (/^沙尘暴$/.test(str)) {
+            res = "w-shachenbao";
+        } else if (/^雾霾$/.test(str)) {
+            res = "w-wumai";
+        } else if (/^雾$/.test(str)) {
+            res = "w-wu";
+        } else if (/^雪$/.test(str)) {
+            res = "w-xue";
+        } else if (/^多云$/.test(str)) {
+            res = "w-duoyun";
+        } else if (/^阴$/.test(str)) {
+            res = "w-yin";
+        } else if (/^小雪$/.test(str)) {
+            res = "w-xiaoxue";
+        } else if (/^雨夹雪$/.test(str)) {
+            res = "w-yujiaxue";
+        } else if (/^雨夹雪$/.test(str)) {
+            res = "w-yujiaxue";
+        } else if (/^中雪$/.test(str)) {
+            res = "w-zhongxue";
+        } else if (/^中雪$/.test(str)) {
+            res = "w-zhongxue";
+        } else if (/^大雪$/.test(str)) {
+            res = "w-daxue";
+        } else {
+            res = "w-other";
+        }
+        return res;
+    }
+
+    //读取下拉列表
+    function getMenuList() {
+        $.ajax({
+            type: "post",
+            url: serverUrl + "getListThemeInfo.json",
+            success: function (data, textStatus) {
+                selectArray = [{
+                    id: -1,
+                    name: '全部'
+                }];
+                var list = data.data || [];
+                for (var i = 0; i < list.length; i++) {
+                    selectArray.push({
+                        id: list[i].id,
+                        name: list[i].ciamsName
+                    })
+                }
+                $("#selectText").text(selectArray[0].name)
+                var html = '';
+                for (var i = 0; i < selectArray.length; i++) {
+                    html += '<div class="select-list-item" onclick="setMenu(' + selectArray[i].id + ',\'' + selectArray[i].name + '\')">' + selectArray[i].name + '</div>'
+                }
+                $("#allSelect").append(html);
+                selectId = selectArray[0].id
+                //查询数据
+                getThemeList();
+
+            },
+            error: function () {
+            }
+        });
+    }
+
+    getMenuList();
+
+    //展开下拉项
+    function showAllList() {
+
+        var showFlag = document.getElementById('allSelect').style.display;
+        console.log($("#allSelect").get(0).style.display)
+        if (showFlag && showFlag === 'none') {
+            $("#allSelect").show()
+        } else {
+            $("#allSelect").hide()
+        }
+
+        $('.rim-box').hide();
+    }
+
+    //选中下拉项
+    function setMenu(id, name) {
+        selectId = id;
+        getThemeList()
+        $("#selectText").text(name);
+        $("#allSelect").hide();
+        $("#informationBody").hide();
+        $('.near-place-box').hide();
+        $('.click-more-info').hide();
+    }
+
+    //根据下拉选中id查询数据
+    function getThemeList() {
+        var objData;
+        if (selectId === -1) {
+            objData = {
+                flag: 1,
+                resourceId: ""
+            };
+        } else {
+            objData = {
+                flag: 1,
+                resourceId: selectId
+            };
+        }
+        $.ajax({
+            type: "post",
+            url: serverUrl + "getListThemePlace.json",
+            contentType: 'application/json;charset=utf-8',
+            data: JSON.stringify(objData),
+            success: function (data, textStatus) {
+                var data = data.data || [];
+                oneStart++;
+                for (var i = 0; i < data.length; i++) {
+                    data[i].position = [];
+                    data[i].position[0] = Number(data[i].longitude);
+                    data[i].position[1] = Number(data[i].latitude);
+                }
+                if (oneStart > 1) {
+                    var curentZoom = map.getZoom();
+                    if (curentZoom > 14) {
+                        map.setZoomAndCenter(curentZoom, data[0].position);
+                    } else {
+                        map.setZoomAndCenter(14, data[0].position);
+                    }
+//                    map.setZoomAndCenter(14, data[0].position);
+                }
+
+                setThemePoint(data);
+            },
+            error: function () {
+            }
+        });
+    }
+
+    //下拉项渲染后台数据
+    function setThemePoint(list) {
+        //先移除所有的点标记
+        map.remove(facilities);
+        var list1 = list;
+        facilities = [];
+        var zoomStyleMapping1 = {
+            6: 0,
+            7: 0,
+            8: 0,
+            9: 0,
+            10: 0,
+            11: 0,
+            12: 0,
+            13: 0,
+            14: 0,
+            15: 0,
+            16: 0,
+            17: 0,
+            18: 0,
+            19: 0,
+            20: 0
+        };
+        for (var i = 0; i < list1.length; i += 1) {
+            var marker = new AMap.ElasticMarker({
+                position: list1[i].position,
+                zooms: [3, 19],
+                zIndex: 300,
+                clickable: true,
+                extData: list1[i].id,
+                styles: [{
+                    icon: {
+                        img: './imgs/location-icon.png',
+                        size: [24, 32],//可见区域的大小
+                        ancher: [12, 32],//锚点
+                        fitZoom: 13,//最合适的级别
+                        scaleFactor: 1.5,//地图放大一级的缩放比例系数
+                        maxScale: 1.3,//最大放大比例
+                        minScale: 0.8//最小放大比例
+                    },
+                    label: {
+                        content: list1[i].resourceName,//文本内容
+                        position: 'BM',//文本位置相对于图标的基准点，
+                        //BL、BM、BR、ML、MR、TL、TM、TR分别代表左下角、底部中央、右下角、
+                        //左侧中央、右侧中央、左上角、顶部中央、右上角。
+                        //缺省时代表相对图标的锚点位置
+                        offset: [0, 0],//相对position的偏移量
+                        minZoom: 13//label的最小显示级别
+                    }
+                }],
+                zoomStyleMapping: zoomStyleMapping1
+            })
+            facilities.push(marker);
+        }
+        map.add(facilities);
+        if (oneStart > 1) {
+            var curentZoom = map.getZoom();
+            if (curentZoom > 14) {
+                map.setZoomAndCenter(curentZoom, list1[0].position);
+            } else {
+                map.setZoomAndCenter(14, list1[0].position);
+            }
+//            map.setZoomAndCenter(14, list1[0].position);
+        }
+
+        for (var i = 0; i < facilities.length; i++) {
+            facilities[i].on('click', function (e, i) {
+                centerPoint = [];
+                centerPoint = [e.target.getPosition().lng, e.target.getPosition().lat];
+                var curentZoom = map.getZoom();
+                if (curentZoom > 14) {
+                    map.setZoomAndCenter(curentZoom, centerPoint);
+                } else {
+                    map.setZoomAndCenter(14, centerPoint);
+                }
+                var pointId = e.target.getExtData();
+                $('#searchInput1').val("");
+                $(".rim-box").hide();
+                $(".search-point-box").hide();
+                $(".search-select-box").show();
+                $("#searchInput1").blur();
+                //获取点信息
+                getPointInformation(pointId);
+                pageNumber = 1;
+                isAllowPost = true;
+                //赋值后准备添加到周边list上
+                selectedPoint = {
+                    position: centerPoint,
+                    id: pointId,
+                    resourceName: e.target.dm[0].SZ
+                };
+            });
+        }
+    }
+
+    //点击位置列表某一项
+    function getThisPoint(id, lng, lat, name) {
+        pageNumber = 1;
+        isAllowPost = true;
+        $('.near-place-box').removeClass('height-ca');
+        centerPoint = [];
+        centerPoint = [lng, lat];
+
+        //赋值后准备添加到周边list上
+        selectedPoint = {
+            position: centerPoint,
+            id: id,
+            resourceName: name
+        };
+        $(".rim-box").hide();
+        $(".search-point-box").hide();
+        $(".search-select-box").show();
+
+        var curentZoom = map.getZoom();
+        if (curentZoom > 14) {
+            map.setZoomAndCenter(curentZoom, centerPoint);
+        } else {
+            map.setZoomAndCenter(14, centerPoint);
+        }
+
+        getPointInformation(id);
+    }
+
+    //获取点击点的详细信息
+    function getPointInformation(id) {
+        var objData = {
+            id: id
+        };
+        $.ajax({
+            type: "post",
+            url: serverUrl + "queryPlaceInfo.json",
+            contentType: 'application/json;charset=utf-8',
+            data: JSON.stringify(objData),
+            success: function (data, textStatus) {
+                var data = data.data;
+                $(".phone-color").attr("href", "tel:" + data.phone + "");
+                $(".information-model-title").text(data.resourceName);
+                $(".phone-color").text(data.phone);
+                $(".site-info").text(data.site);
+                $("#informationBody").show();
+                $('.near-place-box').hide();
+                $('.click-more-info').hide();
+                $("#allSelect").hide()
+
+            },
+            error: function () {
+            }
+        });
+    }
+
+    //搜索后查询接口得到几个点
+    function getPointsBySearch() {
+        if (interfaceFlag === 1) {
+            var objData = {
+                flag: interfaceFlag,
+                resourceName: $("#searchInput1").val()
+            };
+            $.ajax({
+                type: "post",
+                url: serverUrl + "getListThemePlace.json",
+                contentType: 'application/json;charset=utf-8',
+                data: JSON.stringify(objData),
+                success: function (data, textStatus) {
+                    var data = data.data || [];
+                    oneStart++;
+                    if (interfaceFlag === 1) {
+                        for (var i = 0; i < data.length; i++) {
+                            data[i].position = [];
+                            data[i].position[0] = Number(data[i].longitude);
+                            data[i].position[1] = Number(data[i].latitude);
+                        }
+                        setThemePoint(data);
+                    }
+
+                },
+                error: function () {
+                }
+            });
+        } else {
+            getRimPlaceList();
+        }
+
+    }
+
+    //回车事件搜索主题
+    $('#searchInput1').on('keyup', function (event) {
+        if (event.keyCode === 13) {
+            if (interfaceFlag === 1) {
+                getPointsBySearch();
+            } else {
+                isAllowInsert = false;
+                getRimPlaceList($(this).val());
+            }
+            /* setTimeout(function () {
+                 $(this).blur();
+             })*/
+            $(this).blur();
+            $(".click-more-info").hide();
+            $("#informationBody").hide();
+
+        }
+    });
+
+    //清空主题输入框
+    function clearInput1() {
+//        alert("111111111");
+        $("#searchInput1")[0].focus();
+        document.getElementById('searchInput1').value = '';
+//        alert($('#searchInput1').val());
+//        $('#searchInput1').val("");
+//        $('#searchInput1').focus();
+        $('.delete-input-text').hide();
+
+
+    }
+
+    //点击搜索打开主题搜索输入框
+    function openThemeSearch() {
+        $("#allSelect").hide();
+        interfaceFlag = 1;
+        $(".search-select-box").hide();
+        $('.search-point-box').show();
+        $(".rim-box").hide();
+        $('#searchInput1')[0].focus();
+//        window.location.href = "http://api.map.baidu.com/marker?location=" +39.903719+ "," +116.427281+ "&title=" + 'ddddd' + "&content=" +'ssss'+ "&output=html";
+
+    }
+
+    //关闭主题搜索输入框
+    function closeThemeSearch() {
+        $('#searchInput1').val('');
+        $('.search-point-box').hide();
+        $(".search-select-box").show();
+        $('.near-place-box').hide();
+        $('.click-more-info').hide();
+        $('.delete-input-text').hide();
+        isAllowInsert = true;
+        isSearchByName = false;
+        getThemeList();
+    }
+
+    //点击搜周边后
+    function openRimBox() {
+        interfaceFlag = 0;
+        $("#searchInput1").val("");
+        $("#informationBody").hide();
+        $('.near-place-box').hide();
+        $('.click-more-info').hide();
+        $(".rim-box").show();
+        $("#allSelect").hide();
+        isSearchByName = false;
+        getRimList();
+    }
+
+    //获取周边类型列表
+    function getRimList() {
+        var param = {
+            latitude: selectedPoint.position[1],
+            longitude: selectedPoint.position[0],
+            resourceName: selectedPoint.resourceName,
+        }
+        $.ajax({
+            type: "post",
+            url: serverUrl + "getListAppResourceInfo.json",
+            contentType: 'application/json;charset=utf-8',
+            data: JSON.stringify(param),
+            success: function (data, textStatus) {
+                var list = data.data || [];
+                var html = '';
+                $('.rim-box').html('');
+                for (var i in list) {
+                    if (list[i].flag === 0) {
+                        html += ' <div class="rim-item-box" onclick="getRimPlaceList1(' + list[i].id + ',\'' + list[i].nearResourceName + '\')">' +
+                            '        <img class="rim-item-icon" src="' + list[i].iconUrl + '">' +
+                            '        <div class="rim-item-text">' + list[i].nearResourceName + '</div>' +
+                            '  </div>';
+                    }
+                }
+                $('.rim-box').append(html);
+            },
+            error: function () {
+            }
+        });
+    }
+
+    //点击周边类型图标触发事件
+    function getRimPlaceList1(id, name) {
+        placeId = id;
+        getRimPlaceList(name);
+        isSearchByName = false;
+        $("#allSelect").hide();
+        $('.overflow-box').addClass('for-overflow');
+    }
+
+
+    //获取附近资源的位置列表
+    function getRimPlaceList(name) {
+        //把搜索框显示出来
+        $("#searchInput1").val(name);
+        $('#searchInput1').focus();
+        $(".delete-input-text").show();
+        $('.search-select-box').hide();
+        $('.search-point-box').show();
+        $('.rim-box').hide();
+        getPlaceListByNumber();
+    }
+
+    //获取列表分页处理请求函数
+    function getPlaceListByNumber() {
+        var name1 = '';
+        var id = '';
+        if (isSearchByName) {
+            name1 = $("#searchInput1").val();
+            id = '';
+        } else {
+            name1 = '';
+            id = placeId;
+        }
+
+        var param = {
+            resourceId: id,
+            resourceName: name1,
+            pageIndex: pageNumber,
+            pageSize: 15,
+            latitude: centerPoint[1],
+            longitude: centerPoint[0],
+        }
+        if (isAllowPost) {
+            $.ajax({
+                type: "post",
+                url: serverUrl + "getListAppResourcePlace.json",
+                contentType: 'application/json;charset=utf-8',
+                data: JSON.stringify(param),
+                success: function (res, textStatus) {
+                    if (res.data.length === 0) {
+                        isAllowPost = false;
+
+                        return false;
+                    }
+                    var data = res.data[0].place || [];
+
+                    var html = '';
+
+                    //如果分页不为1不清空
+                    if (pageNumber === 1) {
+                        data1 = [];
+                        $(".overflow-box").html('');
+                    }
+
+                    for (var i = 0; i < data.length; i++) {
+                        data[i].position = [];
+                        data[i].position[0] = Number(data[i].longitude);
+                        data[i].position[1] = Number(data[i].latitude);
+                        //得到与选中点的距离
+//                        data[i].distance = AMap.GeometryUtil.distance(centerPoint, data[i].position).toFixed(1);
+                    }
+
+                    /*   //根据距离远近排序
+                       for(var j=0;j<data.length-1;j++){
+                           for(var k=0;k<data.length-j-1;k++){
+                               if(Number(data[k].distance)>Number(data[k+1].distance)){
+                                   var tmp = data[k];
+                                   data[k] = data[k+1];
+                                   data[k+1] = tmp;
+                               }
+                           }
+                       }
+   */
+                    for (var i in data) {
+                        //当前点从返回数据中删除
+                        if (selectedPoint.id !== data[i].id) {
+                            //处理距离格式
+                            if (data[i].distance >= 1000) {
+                                data[i].distance = (data[i].distance / 1000).toFixed(1) + '公里';
+                            } else {
+                                data[i].distance = data[i].distance.toFixed(1) + '米';
+                            }
+                            //电话为空时不显示
+                            if (data[i].phone) {
+                                data[i].displayPhone = 'block';
+                            } else {
+                                data[i].displayPhone = 'none';
+                            }
+                            //生成dom
+                            html += ' <div class="near-place-content">' +
+                                '            <div class="place-left-content"  onclick="getThisPoint(' + data[i].id + ',' + data[i].longitude + ',' + data[i].latitude + ',\'' + data[i].resourceName + '\')">' +
+                                '                <div class="place-title">' + data[i].resourceName + '</div>' +
+                                '                <div class="place-description">' +
+                                '                    <span class="place-distance">' + data[i].distance + '</span>' +
+                                '                    <span class="site-line"></span>' +
+                                '                    <span class="place-site">' + data[i].site + '</span>' +
+                                '                </div>' +
+                                '            </div>' +
+                                '            <a href="tel:' + data[i].phone + '"><div class="place-phone-content" style="display: ' + data[i].displayPhone + '">' +
+                                '                <img src="./imgs/phone-icon.png" class="phone-icon">' +
+                                '                <div class="phone-text">电话</div>' +
+                                '            </div></a>' +
+                                '        </div>';
+                        }
+                    }
+
+
+                    $(".overflow-box").append(html);
+                    $('.near-place-box').show();
+                    var isSubtract = false;
+                    if (pageNumber === 1) {
+                        $('.near-place-box').removeClass('height-ca');
+                        $(".overflow-box")[0].scrollTop = 0;
+                        //最多默认展示五条
+                        if (data.length > 5) {
+                            $(".overflow-box").css("height", "335px");
+                            placeHeight = 335;
+                        } else {
+                            for (var i in data) {
+                                if (selectedPoint.id === data[i].id) {
+                                    isSubtract = true;
+                                    break;
+                                }
+                            }
+                            if (isSubtract) {
+                                placeHeight = 67 * (data.length - 1);
+                                $(".overflow-box").css("height", "" + placeHeight + "px");
+                            } else {
+                                placeHeight = 67 * data.length;
+                                $(".overflow-box").css("height", "" + placeHeight + "px");
+                            }
+
+
+                        }
+                    }
+
+                    for (var i in data) {
+                        data1.push(data[i])
+                    }
+                    if (pageNumber === 1 && isAllowInsert) {
+//                        data1 = data;
+                        data1.unshift(selectedPoint)
+                    }
+                    setThemePoint(data1);
+
+                },
+                error: function () {
+                }
+            });
+        }
+
+    }
+
+    var touchstartY;
+    var touchendY;
+    $('#placeBox').on('touchstart', function (e) {
+        var touch = e.originalEvent.targetTouches[0];
+        touchstartY = touch.pageY;
+    });
+
+    $('#placeBox').on('touchend', function (e) {
+        var touch = e.originalEvent.changedTouches[0];
+        touchendY = touch.pageY;
+        var bodyHeight = Number($("body").css("height").replace("px", '')) - 56;
+        var domHeight = Number($(".overflow-box").css("height").replace("px", ''));
+        var t = $(".overflow-box")[0].scrollTop;
+        var m = $(".overflow-box").offset().top;
+        var b = Number($("body").css("height").replace("px", ''));
+        var disM = m - 56;
+        //下滑
+        if (touchendY > touchstartY) {
+            //元素的滚动条滚动到顶部，并且是下拉，让元素收起
+            if (t === 0 && (disM >= -1 && disM <= 10)) {
+                domHeight = placeHeight;
+                $('.near-place-box').removeClass('height-ca');
+                $(".overflow-box").css("height", "" + domHeight + "px");
+                $('.overflow-box').addClass('for-overflow');
+                return false;
+            } else if (disM > 10) {
+                $('.near-place-box').hide();
+                $('.click-more-info').show();
+                $('.overflow-box').addClass('for-overflow');
+            } else {
+                return false;
+            }
+        } else if (touchendY < touchstartY) {
+            domHeight = bodyHeight;
+            $('.near-place-box').addClass('height-ca');
+            $(".overflow-box").css("height", "" + domHeight + "px");
+            //开始是禁止滚动的，符合上滑条件，增加类名
+            $('.overflow-box').removeClass('for-overflow');
+
+            return false;
+        }
+        $(".overflow-box").css("height", "" + domHeight + "px");
+
+    });
+
+    $(".overflow-box").scroll(function () {
+        var $this = $(this),
+            viewH = $this.height(),//可见高度
+            contentH = $this.get(0).scrollHeight,//内容高度
+            scrollTop = $this.scrollTop();//滚动高度
+        if (contentH - viewH - scrollTop === 0) { //到达底部0px时,加载新内容
+            // 这里加载数据..
+            pageNumber++;
+            getPlaceListByNumber();
+        }
+    });
+
+    function showAllPlace() {
+        $('.near-place-box').removeClass('height-ca');
+        $(".overflow-box").css("height", "" + placeHeight + "px");
+        $('.near-place-box').show();
+        $('.click-more-info').hide();
+    }
+
+    //地图点击事件
+    map.on('click', function (e) {
+        $("#informationBody").hide();
+        $("#allSelect").hide();
+        $(".rim-box").hide();
+        $('.near-place-box').hide();
+        $('.click-more-info').hide();
+
+    })
+
+
+    map.plugin('AMap.Geolocation', function () {
+        geolocation = new AMap.Geolocation({
+            enableHighAccuracy: true,//是否使用高精度定位，默认:true
+            timeout: 10000,          //超过10秒后停止定位，默认：无穷大
+            maximumAge: 0,           //定位结果缓存0毫秒，默认：0
+            convert: true,           //自动偏移坐标，偏移后的坐标为高德坐标，默认：true
+            showButton: true,        //显示定位按钮，默认：true
+            buttonPosition: 'LB',    //定位按钮停靠位置，默认：'LB'，左下角
+            buttonOffset: new AMap.Pixel(10, 80),//定位按钮与设置的停靠位置的偏移量，默认：Pixel(10, 20)
+            showMarker: true,        //定位成功后在定位到的位置显示点标记，默认：true
+            showCircle: true,        //定位成功后用圆圈表示定位精度范围，默认：true
+            panToLocation: true,     //定位成功后将定位到的位置作为地图中心点，默认：true
+            zoomToAccuracy: false      //定位成功后调整地图视野范围使定位位置及精度范围视野内可见，默认：false
+        });
+        map.addControl(geolocation);
+        geolocation.getCurrentPosition();
+        AMap.event.addListener(geolocation, 'complete', onComplete);//返回定位信息
+        AMap.event.addListener(geolocation, 'error', onError);      //返回定位出错信息
+
+        function onComplete(data) {
+            // data是具体的定位信息
+            console.log(data)
+        }
+
+        function onError(data) {
+            // 定位出错
+        }
+    });
+
+
+</script>
+</body>
+</html>

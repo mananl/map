@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "code": 0,
+    "message": "成功"
+  },
+  "data": [{
+    "id": 30,
+    "nearResourceName": "",
+    "ciamsName": "北京市残疾人辅具站",
+    "flag": 1,
+    "iconUrl": ""
+  }]
+}

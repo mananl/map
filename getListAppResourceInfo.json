@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "code": 0,
+    "message": "成功"
+  },
+  "data": [{
+    "id": 32,
+    "nearResourceName": "学校",
+    "ciamsName": "",
+    "flag": 0,
+    "iconUrl": "https://ydgfscloud.globetoon.com/f/TFa8it9Auo+lrRI7S170qrEyBUYK8OtyOdn+ROkcOrg+x.png"
+  }]
+}

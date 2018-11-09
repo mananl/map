@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "code": 0,
+    "message": "成功"
+  },
+  "data": {
+    "id": 303,
+    "resourceName": "北京市残疾人辅具站",
+    "site": "111111北京市残疾人辅具站aaaaaaaaaaaaaaaaaaaaaaaaa",
+    "phone": "",
+    "latitude": "39.7418440000",
+    "longitude": "116.3554030000",
+    "distance": 0.0
+  }
+}
